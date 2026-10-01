@@ -6,7 +6,7 @@ import {
   Search,
   MoreVertical,
   X,
-  Sparkles,
+  User,
 } from 'lucide-react';
 import { TabType, CallState, IvrStep, CallLog, Contact } from './types';
 import { phoneAudio } from './utils/audio';
@@ -19,7 +19,7 @@ import { ContactsList } from './components/ContactsList';
 const INITIAL_LOGS: CallLog[] = [
   {
     id: '1',
-    name: 'የኢትዮጵያ ንግድ ባንክ',
+    name: '951',
     number: '951',
     type: 'outgoing',
     time: 'ትናንት፣ 4:20 PM',
@@ -27,7 +27,7 @@ const INITIAL_LOGS: CallLog[] = [
   },
   {
     id: '2',
-    name: 'አቤል (Abel CBE)',
+    name: 'አቤል',
     number: '+251 911 234 567',
     type: 'incoming',
     time: 'ትናንት፣ 11:15 AM',
@@ -35,7 +35,7 @@ const INITIAL_LOGS: CallLog[] = [
   },
   {
     id: '3',
-    name: 'የኢትዮጵያ ንግድ ባንክ',
+    name: '951',
     number: '951',
     type: 'outgoing',
     time: 'መስከረም 28',
@@ -43,7 +43,7 @@ const INITIAL_LOGS: CallLog[] = [
   },
   {
     id: '4',
-    name: 'ኢትዮ ቴሌኮም (Ethio telecom)',
+    name: 'ኢትዮ ቴሌኮም',
     number: '994',
     type: 'outgoing',
     time: 'መስከረም 25',
@@ -54,27 +54,25 @@ const INITIAL_LOGS: CallLog[] = [
 const INITIAL_CONTACTS: Contact[] = [
   {
     id: 'c1',
-    name: 'የኢትዮጵያ ንግድ ባንክ (CBE)',
+    name: '951',
     number: '951',
-    label: 'የደንበኞች አገልግሎት',
-    isCbe: true,
+    label: 'ስልክ',
   },
   {
     id: 'c2',
-    name: 'ሲቢኢ ብር ድጋፍ (CBE Birr Support)',
-    number: '951',
-    label: 'የሞባይል ባንኪንግ',
-    isCbe: true,
+    name: 'አቤል',
+    number: '+251 911 234 567',
+    label: 'ሞባይል',
   },
   {
     id: 'c3',
-    name: 'ኢትዮ ቴሌኮም (Ethio telecom)',
+    name: 'ኢትዮ ቴሌኮም',
     number: '994',
-    label: 'የጥሪ ማዕከል',
+    label: 'የደንበኞች አገልግሎት',
   },
   {
     id: 'c4',
-    name: 'ፖሊስ (Police Emergency)',
+    name: 'ፖሊስ',
     number: '991',
     label: 'አደጋ ጊዜ',
   },
@@ -93,153 +91,170 @@ export default function App() {
   const [callStatusText, setCallStatusText] = useState<string>('');
   const [isAgentSpeaking, setIsAgentSpeaking] = useState<boolean>(false);
   const [isUserSpeaking, setIsUserSpeaking] = useState<boolean>(false);
+  const [micPermissionDenied, setMicPermissionDenied] = useState<boolean>(false);
+  const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState<boolean>(true);
 
   // Call history & contacts
   const [callLogs, setCallLogs] = useState<CallLog[]>(INITIAL_LOGS);
   const [contacts] = useState<Contact[]>(INITIAL_CONTACTS);
 
-  // Phone manager ref
   const managerRef = useRef<CbePhoneManager | null>(null);
   const timerRef = useRef<any>(null);
 
-  // Initialize Phone Manager
+  // Initialize CBE Manager with event callbacks
   useEffect(() => {
-    const mgr = new CbePhoneManager({
-      onStatusChange: (status) => setCallStatusText(status),
-      onAgentSpeakingChange: (speaking) => setIsAgentSpeaking(speaking),
-      onUserSpeakingChange: (speaking) => setIsUserSpeaking(speaking),
-      onError: (err) => setCallStatusText(err),
+    managerRef.current = new CbePhoneManager({
+      onAgentSpeakingChange: (speaking) => {
+        setIsAgentSpeaking(speaking);
+      },
+      onUserSpeakingChange: (speaking) => {
+        setIsUserSpeaking(speaking);
+      },
+      onStatusChange: (status) => {
+        setCallStatusText(status);
+      },
+      onTranscriptUpdate: () => {
+        // Updated internally
+      },
+      onMicPermissionDenied: (denied) => {
+        setMicPermissionDenied(denied);
+      },
+      onError: (err) => {
+        console.warn('Call manager warning:', err);
+      },
     });
-    managerRef.current = mgr;
 
     return () => {
-      mgr.endCall();
+      if (managerRef.current) {
+        managerRef.current.endCall();
+      }
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
 
-  // Timer tick during connected call
+  // Call timer effect
   useEffect(() => {
     if (callState === 'connected') {
       timerRef.current = setInterval(() => {
         setDurationSeconds((prev) => prev + 1);
       }, 1000);
     } else {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
+      if (timerRef.current) clearInterval(timerRef.current);
       setDurationSeconds(0);
     }
-
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [callState]);
 
-  // Initiate call to given number
+  // Handle Initiating Call
   const handleStartCall = async (num: string) => {
-    const targetNum = num.trim() || '951';
-    setCurrentCallNumber(targetNum);
-    setCallState('ringing');
-    setIvrStep('not_started');
-    setCallStatusText('በመደወል ላይ...');
-
+    const targetNumber = num.trim() || '951';
+    setCurrentCallNumber(targetNumber);
+    setCallState('dialing');
+    setDurationSeconds(0);
+    setIsMuted(false);
+    setIsSpeakerOn(true);
+    phoneAudio.setSpeaker(true);
     phoneAudio.startRingback();
 
-    // After 2.5 seconds of ringing, simulate pickup
-    setTimeout(async () => {
+    // Log call
+    const newLog: CallLog = {
+      id: Date.now().toString(),
+      name: targetNumber,
+      number: targetNumber,
+      type: 'outgoing',
+      time: 'አሁን',
+      duration: '00:00',
+    };
+    setCallLogs((prev) => [newLog, ...prev]);
+
+    // Connect after 1.5s ring
+    setTimeout(() => {
       phoneAudio.stopRingback();
-      phoneAudio.playCallConnected();
       setCallState('connected');
-      managerRef.current?.startCall();
 
-      if (targetNum === '951') {
-        // Commercial Bank of Ethiopia IVR Flow
-        setIvrStep('welcome_menu');
-        setCallStatusText('የኢትዮጵያ ንግድ ባንክ የጥሪ ማዕከል');
+      if (managerRef.current) {
+        managerRef.current.startCall();
 
-        // Play initial IVR welcome prompt
-        if (managerRef.current) {
-          await managerRef.current.speakAgent(managerRef.current.welcomePrompt);
-        }
-      } else {
-        setCallStatusText('ጥሪ ተገናኝቷል');
-      }
-    }, 2400);
-  };
-
-  // User taps DTMF Key on keypad (e.g. 4 for Amharic)
-  const handleDtmfInput = async (digit: string) => {
-    if (ivrStep === 'welcome_menu' && digit === '4') {
-      setIvrStep('agent_intro');
-      setCallStatusText('ወደ አማርኛ አገልግሎት እየተገናኘ ነው...');
-      phoneAudio.stopCurrentAudio();
-
-      setTimeout(async () => {
-        if (managerRef.current) {
-          // Play the representative's greeting: "የኢትዮጵያ ንግድ ባንክ፤ እባክዎትን ምን ልርዳዎ?"
-          await managerRef.current.speakAgent(managerRef.current.agentGreeting);
-
-          // Once greeting completes, transition to active hands-free turn
+        // 951 flow: Play authentic welcome prompt
+        if (targetNumber === '951' || targetNumber.includes('951')) {
+          setIvrStep('welcome_menu');
+          managerRef.current
+            .playWelcomePrompt()
+            .then(() => {
+              // Waiting for DTMF key (e.g. 4)
+            })
+            .catch((e) => console.warn(e));
+        } else {
           setIvrStep('active_call');
-          setCallStatusText('እባክዎትን ይናገሩ... (ማይክ ክፍት ነው)');
-
-          // Start listening to the caller in Amharic
-          managerRef.current.startListening((userSpeech) => {
-            handleUserTurn(userSpeech);
-          });
+          managerRef.current.startListening(handleUserTurn);
         }
-      }, 500);
-    }
+      }
+    }, 1500);
   };
 
-  // Handle a user speech turn in Amharic
-  const handleUserTurn = async (userText: string) => {
-    if (!managerRef.current || callState !== 'connected') return;
-
-    await managerRef.current.processUserMessage(userText, (nextUserSpeech) => {
-      handleUserTurn(nextUserSpeech);
+  // Toggle Mute
+  const handleToggleMute = () => {
+    setIsMuted((prev) => {
+      const next = !prev;
+      if (managerRef.current) {
+        managerRef.current.setMuted(next);
+      }
+      return next;
     });
   };
 
-  // Hang up the call
+  // Toggle Loudspeaker / Earpiece
+  const handleToggleSpeaker = () => {
+    setIsSpeakerOn((prev) => {
+      const next = !prev;
+      phoneAudio.setSpeaker(next);
+      return next;
+    });
+  };
+
+  // Handle DTMF keypad press during call
+  const handleDtmfInput = async (digit: string) => {
+    if (ivrStep === 'welcome_menu' && digit === '4') {
+      setIvrStep('agent_intro');
+      if (managerRef.current) {
+        await managerRef.current.playAgentGreeting();
+        setIvrStep('active_call');
+        managerRef.current.startListening(handleUserTurn);
+      }
+    }
+  };
+
+  // Next turn callback
+  const handleUserTurn = (userText: string) => {
+    if (managerRef.current && userText.trim().length > 0) {
+      managerRef.current.processUserMessage(userText, handleUserTurn);
+    }
+  };
+
+  // Handle Ending Call
   const handleEndCall = () => {
+    phoneAudio.stopRingback();
     if (managerRef.current) {
       managerRef.current.endCall();
     }
-    phoneAudio.stopRingback();
-    phoneAudio.stopCurrentAudio();
-    phoneAudio.playCallEnded();
-
-    // Log the call into Recents
-    if (currentCallNumber) {
-      const isCbe = currentCallNumber === '951';
-      const newLog: CallLog = {
-        id: Date.now().toString(),
-        name: isCbe ? 'የኢትዮጵያ ንግድ ባንክ' : currentCallNumber,
-        number: currentCallNumber,
-        type: 'outgoing',
-        time: 'አሁን',
-        duration: `${Math.floor(durationSeconds / 60)}:${(durationSeconds % 60).toString().padStart(2, '0')}`,
-      };
-      setCallLogs((prev) => [newLog, ...prev]);
-    }
-
     setCallState('ended');
     setIvrStep('not_started');
-    setCallStatusText('ጥሪው ተቋርጧል');
+    setIsAgentSpeaking(false);
+    setIsUserSpeaking(false);
 
     setTimeout(() => {
       setCallState('idle');
-      setCallStatusText('');
-    }, 1200);
+      setCurrentCallNumber('');
+    }, 800);
   };
 
   return (
-    <div className="w-full min-h-screen bg-slate-950 flex items-center justify-center p-0 sm:p-4 text-slate-100 font-sans">
-      {/* Phone Shell / Viewport */}
-      <div className="relative w-full max-w-md h-screen sm:h-[840px] bg-slate-900 sm:rounded-[36px] overflow-hidden shadow-2xl flex flex-col border border-slate-800">
+    <div className="w-full min-h-screen bg-[#EEF2F6] flex items-center justify-center p-0 sm:p-4 text-[#202124] font-sans">
+      {/* Phone Shell / Viewport (Clean Google Pixel Style in White Theme) */}
+      <div className="relative w-full max-w-md h-screen sm:h-[840px] bg-white sm:rounded-[40px] overflow-hidden shadow-2xl flex flex-col border border-gray-200">
         {/* Active Call Overlay Screen */}
         {callState !== 'idle' ? (
           <ActiveCallScreen
@@ -249,33 +264,39 @@ export default function App() {
             durationSeconds={durationSeconds}
             isAgentSpeaking={isAgentSpeaking}
             isUserSpeaking={isUserSpeaking}
+            isMuted={isMuted}
+            onToggleMute={handleToggleMute}
+            isSpeakerOn={isSpeakerOn}
+            onToggleSpeaker={handleToggleSpeaker}
             callStatusText={callStatusText}
+            micPermissionDenied={micPermissionDenied}
+            onRequestMicPermission={async () => {
+              if (managerRef.current) {
+                const granted = await managerRef.current.requestMicPermission();
+                if (granted && ivrStep === 'active_call') {
+                  managerRef.current.startListening(handleUserTurn);
+                }
+              }
+            }}
+            onSendUserText={handleUserTurn}
+            onFinishSpeaking={() => {
+              managerRef.current?.finishSpeakingManually();
+            }}
             onEndCall={handleEndCall}
             onDtmfKey={handleDtmfInput}
           />
         ) : (
-          /* Google Phone Main App Screen */
-          <div className="flex-1 flex flex-col justify-between h-full bg-[#121316]">
-            {/* Top Search Bar (Google Pixel Phone Style) */}
-            <div className="pt-3 px-4 pb-2">
-              <div className="w-full h-12 bg-slate-800/80 hover:bg-slate-800 rounded-full px-4 flex items-center justify-between text-slate-300 border border-slate-700/40 shadow-sm transition-colors">
+          /* Google Phone Main App Screen (White / Light Theme) */
+          <div className="flex-1 flex flex-col justify-between h-full bg-white">
+            {/* Top Search Bar (Google Pixel Phone Light Style) */}
+            <div className="pt-4 px-4 pb-2">
+              <div className="w-full h-12 bg-[#F1F3F4] hover:bg-[#E8EAED] rounded-full px-4 flex items-center justify-between text-[#3C4043] transition-colors shadow-sm">
                 <div className="flex items-center gap-3">
-                  <Search className="w-5 h-5 text-slate-400" />
-                  <span className="text-sm font-normal text-slate-400">እውቂያዎችን ይፈልጉ...</span>
+                  <Search className="w-5 h-5 text-[#5F6368]" />
+                  <span className="text-sm font-normal text-[#5F6368]">እውቂያዎችን ይፈልጉ...</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      setDialNumber('951');
-                      setShowKeypad(true);
-                    }}
-                    className="flex items-center gap-1 bg-amber-500/15 text-amber-400 text-xs px-2.5 py-1 rounded-full border border-amber-500/30"
-                    title="ወደ 951 ይደውሉ"
-                  >
-                    <Sparkles className="w-3 h-3" />
-                    <span>951 CBE</span>
-                  </button>
-                  <MoreVertical className="w-4 h-4 text-slate-400" />
+                  <MoreVertical className="w-4 h-4 text-[#5F6368]" />
                 </div>
               </div>
             </div>
@@ -296,29 +317,29 @@ export default function App() {
                       onCall={handleStartCall}
                     />
                   ) : (
-                    /* Speed Dial Favorites */
+                    /* Speed Dial Favorites (Clean Light Google Style) */
                     <div className="p-4 flex flex-col gap-4">
-                      <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-2">
-                        ተመራጭ ቁጥሮች (Favorites)
+                      <div className="text-xs font-medium text-[#5F6368] uppercase tracking-wider px-2">
+                        ተመራጭ ቁጥሮች
                       </div>
                       <div
                         onClick={() => handleStartCall('951')}
-                        className="bg-gradient-to-r from-purple-950/60 to-amber-950/40 border border-amber-500/30 rounded-2xl p-4 flex items-center justify-between cursor-pointer hover:border-amber-400/60 transition-all shadow-md group"
+                        className="bg-[#F8F9FA] hover:bg-[#F1F3F4] border border-gray-200 rounded-2xl p-4 flex items-center justify-between cursor-pointer transition-all shadow-sm group"
                       >
                         <div className="flex items-center gap-3.5">
-                          <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-amber-500 to-amber-700 flex items-center justify-center font-black text-slate-950 text-base shadow-sm">
-                            CBE
+                          <div className="w-12 h-12 rounded-full bg-[#E8F0FE] text-[#1A73E8] flex items-center justify-center font-bold text-base shadow-sm">
+                            <User className="w-6 h-6 text-[#1A73E8]" />
                           </div>
                           <div className="flex flex-col">
-                            <span className="text-base font-semibold text-amber-300">
-                              የኢትዮጵያ ንግድ ባንክ
+                            <span className="text-base font-medium text-[#202124]">
+                              951
                             </span>
-                            <span className="text-xs text-slate-400">
-                              951 • የደንበኞች አገልግሎት ማዕከል
+                            <span className="text-xs text-[#5F6368]">
+                              ስልክ
                             </span>
                           </div>
                         </div>
-                        <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-white transition-all">
+                        <div className="w-10 h-10 rounded-full bg-[#E6F4EA] text-[#1E8E3E] flex items-center justify-center group-hover:bg-[#1E8E3E] group-hover:text-white transition-all">
                           <Phone className="w-5 h-5 fill-current" />
                         </div>
                       </div>
@@ -328,12 +349,12 @@ export default function App() {
               )}
             </div>
 
-            {/* Bottom Floating Keypad Toggle or Close Keypad button */}
+            {/* Bottom Keypad Toggle */}
             <div className="px-6 py-1 flex items-center justify-center">
               {showKeypad && activeTab === 'speed_dial' && (
                 <button
                   onClick={() => setShowKeypad(false)}
-                  className="text-xs text-slate-400 hover:text-slate-200 py-1 px-3 rounded-full flex items-center gap-1 bg-slate-800/40"
+                  className="text-xs text-[#5F6368] hover:text-[#202124] py-1 px-3 rounded-full flex items-center gap-1 bg-[#F1F3F4]"
                 >
                   <X className="w-3.5 h-3.5" />
                   <span>የቁልፍ ሰሌዳ ደብቅ</span>
@@ -341,9 +362,9 @@ export default function App() {
               )}
             </div>
 
-            {/* Bottom Navigation Bar (Google Phone Style: Favorites, Recents, Contacts) */}
-            <div className="h-16 bg-slate-950/80 backdrop-blur-md border-t border-slate-800/80 px-6 flex items-center justify-around">
-              {/* Speed Dial / Favorites Tab */}
+            {/* Bottom Navigation Bar (Google Material 3 Light Style) */}
+            <div className="h-16 bg-[#F8F9FA] border-t border-gray-200 px-6 flex items-center justify-around select-none">
+              {/* Dialpad Tab */}
               <button
                 onClick={() => {
                   setActiveTab('speed_dial');
@@ -351,13 +372,13 @@ export default function App() {
                 }}
                 className={`flex flex-col items-center gap-1 py-1 transition-colors ${
                   activeTab === 'speed_dial'
-                    ? 'text-amber-400 font-medium'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'text-[#001D35] font-semibold'
+                    : 'text-[#444746] hover:text-[#1F1F1F]'
                 }`}
               >
                 <div
                   className={`px-4 py-0.5 rounded-full ${
-                    activeTab === 'speed_dial' ? 'bg-amber-400/20' : ''
+                    activeTab === 'speed_dial' ? 'bg-[#C2E7FF]' : ''
                   }`}
                 >
                   <Phone className="w-5 h-5" />
@@ -373,13 +394,13 @@ export default function App() {
                 }}
                 className={`flex flex-col items-center gap-1 py-1 transition-colors ${
                   activeTab === 'recents'
-                    ? 'text-amber-400 font-medium'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'text-[#001D35] font-semibold'
+                    : 'text-[#444746] hover:text-[#1F1F1F]'
                 }`}
               >
                 <div
                   className={`px-4 py-0.5 rounded-full ${
-                    activeTab === 'recents' ? 'bg-amber-400/20' : ''
+                    activeTab === 'recents' ? 'bg-[#C2E7FF]' : ''
                   }`}
                 >
                   <Clock className="w-5 h-5" />
@@ -395,13 +416,13 @@ export default function App() {
                 }}
                 className={`flex flex-col items-center gap-1 py-1 transition-colors ${
                   activeTab === 'contacts'
-                    ? 'text-amber-400 font-medium'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'text-[#001D35] font-semibold'
+                    : 'text-[#444746] hover:text-[#1F1F1F]'
                 }`}
               >
                 <div
                   className={`px-4 py-0.5 rounded-full ${
-                    activeTab === 'contacts' ? 'bg-amber-400/20' : ''
+                    activeTab === 'contacts' ? 'bg-[#C2E7FF]' : ''
                   }`}
                 >
                   <Users className="w-5 h-5" />

@@ -37,59 +37,46 @@ export const Keypad: React.FC<KeypadProps> = ({ number, onNumberChange, onCall }
     onNumberChange('');
   };
 
-  const isCbeMatch = number === '951' || number === '95' || number === '9';
-
   return (
-    <div className="flex flex-col items-center justify-between w-full max-w-sm mx-auto h-full px-6 pb-6 pt-2">
-      {/* Top Number Display */}
-      <div className="w-full flex flex-col items-center justify-center min-h-[90px] mb-2">
+    <div className="flex flex-col items-center justify-between w-full max-w-sm mx-auto h-full px-6 pb-6 pt-2 select-none">
+      {/* Top Number Display (Google Light Theme) */}
+      <div className="w-full flex flex-col items-center justify-center min-h-[80px]">
         {number ? (
-          <div className="w-full flex flex-col items-center">
-            {isCbeMatch && (
-              <div className="text-xs font-medium text-amber-500 bg-amber-500/10 px-3 py-1 rounded-full mb-1 flex items-center gap-1.5 animate-fadeIn">
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                የኢትዮጵያ ንግድ ባንክ (CBE 951)
-              </div>
-            )}
-            <div className="relative w-full flex items-center justify-center">
-              <span className="text-4xl font-normal tracking-wider text-slate-100 select-all font-mono">
-                {number}
-              </span>
-              <button
-                onClick={handleDelete}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  handleClear();
-                }}
-                className="absolute right-2 p-2 text-slate-400 hover:text-slate-200 active:scale-90 transition-transform"
-                title="አጥፋ"
-                aria-label="Delete"
-              >
-                <Delete className="w-6 h-6" />
-              </button>
-            </div>
-            {number === '951' && (
-              <span className="text-xs text-slate-400 mt-1">የደንበኞች አገልግሎት ማዕከል</span>
-            )}
+          <div className="relative w-full flex items-center justify-center">
+            <span className="text-4xl font-normal tracking-wider text-[#202124] select-all font-mono">
+              {number}
+            </span>
+            <button
+              onClick={handleDelete}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                handleClear();
+              }}
+              className="absolute right-2 p-2 text-[#5F6368] hover:text-[#202124] active:scale-90 transition-transform"
+              title="አጥፋ"
+              aria-label="Delete"
+            >
+              <Delete className="w-6 h-6" />
+            </button>
           </div>
         ) : (
-          <div className="text-slate-500 text-sm flex items-center gap-2">
-            <span>ቁጥር ይተይቡ (ለምሳሌ፡ <strong className="text-amber-400 font-semibold cursor-pointer" onClick={() => onNumberChange('951')}>951</strong>)</span>
+          <div className="text-[#80868B] text-sm">
+            ቁጥር ይተይቡ
           </div>
         )}
       </div>
 
-      {/* Dial Keys Grid */}
+      {/* Dial Keys Grid (Google Phone Light Style) */}
       <div className="grid grid-cols-3 gap-x-6 gap-y-3.5 w-full max-w-[280px]">
         {KEYS.map((k) => (
           <button
             key={k.digit}
             onClick={() => handleKeyPress(k.digit)}
-            className="w-18 h-18 mx-auto rounded-full bg-slate-800/80 hover:bg-slate-700/80 active:bg-slate-600 active:scale-95 transition-all duration-100 flex flex-col items-center justify-center border border-slate-700/40 shadow-sm"
+            className="w-18 h-18 mx-auto rounded-full bg-[#F1F3F4] hover:bg-[#E8EAED] active:bg-[#DADCE0] active:scale-95 transition-all duration-100 flex flex-col items-center justify-center shadow-sm"
           >
-            <span className="text-2xl font-light text-slate-100 leading-none">{k.digit}</span>
+            <span className="text-2xl font-normal text-[#202124] leading-none">{k.digit}</span>
             {k.sub && (
-              <span className="text-[10px] font-medium text-slate-400 tracking-widest mt-1 uppercase">
+              <span className="text-[10px] font-medium text-[#5F6368] tracking-widest mt-1 uppercase">
                 {k.sub}
               </span>
             )}
@@ -97,17 +84,15 @@ export const Keypad: React.FC<KeypadProps> = ({ number, onNumberChange, onCall }
         ))}
       </div>
 
-      {/* Bottom Call Button */}
-      <div className="mt-5 w-full flex items-center justify-center">
+      {/* Bottom Google Phone Call Button (Material Green) */}
+      <div className="w-full flex items-center justify-center pt-3">
         <button
-          onClick={() => {
-            const numToCall = number.trim() || '951';
-            onCall(numToCall);
-          }}
-          className="w-18 h-18 rounded-full bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 active:scale-95 transition-all shadow-lg shadow-emerald-500/30 flex items-center justify-center text-white"
-          aria-label="ደውል"
+          onClick={() => onCall(number || '951')}
+          className="w-16 h-16 rounded-full bg-[#1E8E3E] hover:bg-[#188038] active:bg-[#137333] active:scale-95 text-white flex items-center justify-center shadow-lg shadow-emerald-600/30 transition-all duration-150"
+          title="ደውል"
+          aria-label="Call"
         >
-          <Phone className="w-8 h-8 fill-current" />
+          <Phone className="w-7 h-7 fill-current" />
         </button>
       </div>
     </div>

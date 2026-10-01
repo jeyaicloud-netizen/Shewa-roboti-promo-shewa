@@ -34,4 +34,5 @@ export type IvrStep =
 export interface ChatMessage {
   role: 'user' | 'model';
   text: string;
+  audioUrl?: string;
 }

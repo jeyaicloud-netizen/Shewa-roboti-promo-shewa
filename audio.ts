@@ -118,28 +118,9 @@ class PhoneAudioEngine {
     }
   }
 
-  // Play call connected beep
+  // Play call connected beep (disabled for clean realistic phone audio)
   playCallConnected() {
-    try {
-      const ctx = this.getContext();
-      const now = ctx.currentTime;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      osc.frequency.setValueAtTime(800, now);
-      osc.frequency.setValueAtTime(1200, now + 0.08);
-
-      gain.gain.setValueAtTime(0.15, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
-
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.start(now);
-      osc.stop(now + 0.2);
-    } catch (e) {
-      console.warn(e);
-    }
+    // Silent - realistic phone connects without artificial beeps
   }
 
   // Play call end tone
@@ -164,12 +145,27 @@ class PhoneAudioEngine {
     }
   }
 
+  private isSpeakerLoud: boolean = true;
+
+  // Toggle or set loudspeaker volume (Loud vs Earpiece)
+  setSpeaker(isLoud: boolean) {
+    this.isSpeakerLoud = isLoud;
+    if (this.currentAudio) {
+      this.currentAudio.volume = isLoud ? 1.0 : 0.25;
+    }
+  }
+
+  getSpeaker(): boolean {
+    return this.isSpeakerLoud;
+  }
+
   // Play base64 WAV audio (from Gemini TTS)
   async playBase64Audio(base64Data: string): Promise<void> {
     this.stopCurrentAudio();
     return new Promise((resolve, reject) => {
       try {
         const audio = new Audio(`data:audio/wav;base64,${base64Data}`);
+        audio.volume = this.isSpeakerLoud ? 1.0 : 0.25;
         this.currentAudio = audio;
         audio.onended = () => {
           this.currentAudio = null;
@@ -182,6 +178,34 @@ class PhoneAudioEngine {
         audio.play().catch(reject);
       } catch (err) {
         reject(err);
+      }
+    });
+  }
+
+  // Play direct audio file (MP3 / WAV from /audio/ directory)
+  async playAudioFile(url: string): Promise<void> {
+    this.stopCurrentAudio();
+    return new Promise((resolve) => {
+      try {
+        const audio = new Audio(url);
+        audio.volume = this.isSpeakerLoud ? 1.0 : 0.25;
+        this.currentAudio = audio;
+        audio.onended = () => {
+          this.currentAudio = null;
+          resolve();
+        };
+        audio.onerror = (err) => {
+          this.currentAudio = null;
+          console.warn('Audio playback error for:', url, err);
+          resolve();
+        };
+        audio.play().catch((err) => {
+          console.warn('Audio play() error:', err);
+          resolve();
+        });
+      } catch (err) {
+        console.warn('playAudioFile error:', err);
+        resolve();
       }
     });
   }
@@ -211,13 +235,23 @@ class PhoneAudioEngine {
       utterance.rate = 0.95;
       utterance.pitch = 1.0;
 
-      // Check available voices for am or Ethiopian
+      // Strictly check available voices for am or Ethiopian
       const voices = window.speechSynthesis.getVoices();
-      const amVoice = voices.find((v) => v.lang.startsWith('am') || v.name.toLowerCase().includes('amharic'));
-      if (amVoice) {
-        utterance.voice = amVoice;
+      const amVoice = voices.find(
+        (v) =>
+          v.lang.toLowerCase().startsWith('am') ||
+          v.name.toLowerCase().includes('amharic') ||
+          v.name.toLowerCase().includes('ethiop')
+      );
+
+      // If phone lacks an authentic Amharic voice, NEVER fall back to English TalkBack voice!
+      if (!amVoice) {
+        console.warn('No native Amharic TTS voice found on this device; skipping browser speech to avoid English TalkBack voice.');
+        resolve();
+        return;
       }
 
+      utterance.voice = amVoice;
       utterance.onend = () => resolve();
       utterance.onerror = () => resolve();
       window.speechSynthesis.speak(utterance);
